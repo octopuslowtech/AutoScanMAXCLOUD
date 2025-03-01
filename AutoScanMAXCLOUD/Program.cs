@@ -66,24 +66,22 @@ void OnDeviceDisconnected(object sender, DeviceDataEventArgs e)
 
 ADB.InitLoginCaller();
 
+
 AdbServer server = new AdbServer();
 server.StartServer("adb.exe", restartServerIfNewer: false);
 
 var monitor = new DeviceMonitor(new AdbSocket(new IPEndPoint(IPAddress.Loopback, AdbClient.AdbServerPort)));
 
-
-
 monitor.DeviceConnected += OnDeviceConnected;
 monitor.DeviceDisconnected += OnDeviceDisconnected;
 monitor.Start();
-
 
 new Thread(() =>
 {
     while (true)
     {
        Console.WriteLine($"Running Device: {lstDeviceRunning.Count}");
-         Thread.Sleep(5000);
+       Thread.Sleep(5000);
     }
 }).Start();
 

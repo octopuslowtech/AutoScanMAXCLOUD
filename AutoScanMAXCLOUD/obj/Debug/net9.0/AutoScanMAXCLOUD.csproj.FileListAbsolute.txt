@@ -44,3 +44,4 @@ F:/CloudPhone/AutoScanMAXCLOUD/AutoScanMAXCLOUD/bin/Debug/net9.0/runtimes/win/li
 /home/octopus/Desktop/driveD/CloudPhone/AutoScanMAXCLOUD/AutoScanMAXCLOUD/obj/Debug/net9.0/AutoScanMAXCLOUD.pdb
 /home/octopus/Desktop/driveD/CloudPhone/AutoScanMAXCLOUD/AutoScanMAXCLOUD/obj/Debug/net9.0/AutoScanMAXCLOUD.genruntimeconfig.cache
 /home/octopus/Desktop/driveD/CloudPhone/AutoScanMAXCLOUD/AutoScanMAXCLOUD/obj/Debug/net9.0/ref/AutoScanMAXCLOUD.dll
+/home/octopus/Desktop/driveD/CloudPhone/AutoScanMAXCLOUD/AutoScanMAXCLOUD/obj/Debug/net9.0/AutoScanMAXCLOUD.sourcelink.json
