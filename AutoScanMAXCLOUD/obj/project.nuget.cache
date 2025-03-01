@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "dgSpecHash": "Xed9ecWNUqQ=",
+  "success": true,
+  "projectFilePath": "/home/octopus/Desktop/driveD/CloudPhone/AutoScanMAXCLOUD/AutoScanMAXCLOUD/AutoScanMAXCLOUD.csproj",
+  "expectedPackageFiles": [
+    "/home/octopus/.nuget/packages/microsoft.extensions.logging.abstractions/2.0.0/microsoft.extensions.logging.abstractions.2.0.0.nupkg.sha512",
+    "/home/octopus/.nuget/packages/microsoft.netcore.platforms/2.0.0/microsoft.netcore.platforms.2.0.0.nupkg.sha512",
+    "/home/octopus/.nuget/packages/microsoft.win32.systemevents/4.5.0/microsoft.win32.systemevents.4.5.0.nupkg.sha512",
+    "/home/octopus/.nuget/packages/sharpadbclient/2.3.23/sharpadbclient.2.3.23.nupkg.sha512",
+    "/home/octopus/.nuget/packages/system.buffers/4.5.0/system.buffers.4.5.0.nupkg.sha512",
+    "/home/octopus/.nuget/packages/system.drawing.common/4.5.0/system.drawing.common.4.5.0.nupkg.sha512"
+  ],
+  "logs": []
+}
