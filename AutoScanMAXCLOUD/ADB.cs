@@ -6,7 +6,7 @@ namespace AutoScanMAXCLOUD;
 public class ADB
 {
     public string DeviceID { get; set; }
-    private static string TOKEN = "min_8691cfdf73a042078ec5e4a1717cf4f1";
+    public static string TOKEN;
     private static string CALLER_NAME = "goodmorning.txt";
 
     public ADB(string deviceID)
@@ -25,14 +25,13 @@ public class ADB
         Console.WriteLine(result);
     }
 
-
     public void SetupMaxCloud()
     {
         GrantPermissionMaxCloud();
 
         PushFile(CALLER_NAME, $"/sdcard/{CALLER_NAME}");
 
-        runShell("monkey -p com.maxcloud.app -c android.intent.category.LAUNCHER 1");
+        RunShell("monkey -p com.maxcloud.app -c android.intent.category.LAUNCHER 1");
     }
 
     public void GrantPermissionMaxCloud()
@@ -46,40 +45,13 @@ public class ADB
 
         foreach (var permission in permissions)
         {
-            runShell($"pm grant com.maxcloud.app {permission}");
+            RunShell($"pm grant com.maxcloud.app {permission}");
         }
 
-        runShell("ime enable com.maxcloud.app/com.maxcloud.keyboard.latin.LatinIME");
-        runShell("ime set com.maxcloud.app/com.maxcloud.keyboard.latin.LatinIME");
+        RunShell("ime enable com.maxcloud.app/com.maxcloud.keyboard.latin.LatinIME");
+        RunShell("ime set com.maxcloud.app/com.maxcloud.keyboard.latin.LatinIME");
     }
-
-    public static List<string> GetDevices()
-    {
-        var process = new Process
-        {
-            StartInfo = new ProcessStartInfo
-            {
-                FileName = "adb",
-                Arguments = "devices",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                CreateNoWindow = true
-            }
-        };
-        process.Start();
-        process.WaitForExit();
-        var output = process.StandardOutput.ReadToEnd();
-        var devices = new List<string>();
-        foreach (var line in output.Split('\n'))
-        {
-            if (line.Contains('\t'))
-            {
-                devices.Add(line.Split('\t')[0]);
-            }
-        }
-
-        return devices;
-    }
+    
 
     public static void InitLoginCaller()
     {
@@ -93,7 +65,7 @@ public class ADB
             throw new Exception("maxcloud.apk not found");
     }
 
-    public string runShell(string command)
+    public string RunShell(string command)
     {
         return RunAdb($"adb -s {DeviceID} shell {command}");
     }
