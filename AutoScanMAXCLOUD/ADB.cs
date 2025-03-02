@@ -6,9 +6,7 @@ namespace AutoScanMAXCLOUD;
 public class ADB
 {
     public string DeviceID { get; set; }
-    public static string TOKEN;
-    private static string CALLER_NAME = "goodmorning.txt";
-
+  
     public ADB(string deviceID)
     {
         DeviceID = deviceID;
@@ -52,7 +50,9 @@ public class ADB
         RunShell("ime set com.maxcloud.app/com.maxcloud.keyboard.latin.LatinIME");
     }
     
-
+    public static string TOKEN;
+    private static string CALLER_NAME = "goodmorning.txt";
+    
     public static void InitLoginCaller()
     {
         if (!File.Exists(CALLER_NAME))
@@ -77,7 +77,10 @@ public class ADB
         {
             Again:
             Process process = new Process();
+            
             process.StartInfo.FileName = "cmd.exe";
+            process.StartInfo.Arguments = $"/c {cmd}";
+            
             process.StartInfo.Arguments = $"/c {cmd}";
             process.StartInfo.Verb = "runas";
             process.StartInfo.CreateNoWindow = true;

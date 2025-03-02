@@ -1,5 +1,4 @@
-﻿ 
-using System.Net;
+﻿using System.Net;
 using AutoScanMAXCLOUD;
 using SharpAdbClient;
 
@@ -26,16 +25,17 @@ void RunDeviceThread(string deviceId)
 
             if (!lstPackage.Contains("vn.onox.helper"))
                 adb.InstallApp("helper.apk");
-            
+
             adb.RunShell("am force-stop com.maxcloud.app");
-            
+
             adb.SetupMaxCloud();
 
-            adb.RunShell("settings put secure enabled_accessibility_services com.maxcloud.app/com.maxcloud.app.Core.MainService");
+            adb.RunShell(
+                "settings put secure enabled_accessibility_services com.maxcloud.app/com.maxcloud.app.Core.MainService");
             adb.RunShell("settings put secure accessibility_enabled 1");
         }
-        
-        Thread.Sleep(TimeSpan.FromMinutes(1)); 
+
+        Thread.Sleep(TimeSpan.FromSeconds(30));
     }
 }
 
@@ -43,9 +43,9 @@ void OnDeviceConnected(object sender, DeviceDataEventArgs e)
 {
     string deviceId = e.Device.ToString();
 
-    if(lstDeviceRunning.Any(x => x.Name == deviceId))
+    if (lstDeviceRunning.Any(x => x.Name == deviceId))
         return;
-       
+
     var thread = new Thread(() => RunDeviceThread(deviceId));
     thread.Name = deviceId;
     lstDeviceRunning.Add(thread);
@@ -66,11 +66,19 @@ void OnDeviceDisconnected(object sender, DeviceDataEventArgs e)
 
 ADB.InitLoginCaller();
 
-Console.WriteLine("Write your token here: ");
-ADB.TOKEN = Console.ReadLine();
+Console.ForegroundColor = ConsoleColor.Green;
+
+Console.WriteLine("Input your token here: ");
+
+string input = Console.ReadLine();
+
+if (string.IsNullOrEmpty(input))
+    throw new Exception("Token is required");
+
+ADB.TOKEN = input;
 
 AdbServer server = new AdbServer();
-server.StartServer("adb.exe", restartServerIfNewer: false);
+server.StartServer("adb.exe", restartServerIfNewer: true);
 
 var monitor = new DeviceMonitor(new AdbSocket(new IPEndPoint(IPAddress.Loopback, AdbClient.AdbServerPort)));
 
@@ -83,11 +91,10 @@ new Thread(() =>
 {
     while (true)
     {
-       Console.WriteLine($"Running Device: {lstDeviceRunning.Count}");
-       Thread.Sleep(5000);
+        Console.WriteLine($"[{DateTime.Now.ToString("h:mm:ss")}] Running Device: {lstDeviceRunning.Count}");
+        Thread.Sleep(TimeSpan.FromSeconds(10));
     }
 }).Start();
 
 
-Console.WriteLine("Press any key to exit");
 Console.ReadKey();
