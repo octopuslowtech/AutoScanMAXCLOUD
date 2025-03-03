@@ -6,7 +6,7 @@ namespace AutoScanMAXCLOUD;
 public class ADB
 {
     public string DeviceID { get; set; }
-  
+
     public ADB(string deviceID)
     {
         DeviceID = deviceID;
@@ -14,7 +14,7 @@ public class ADB
 
     public string InstallApp(string apkPath)
     {
-        return RunAdb($"adb -s {DeviceID} install -r {apkPath}");
+        return RunAdb($"adb -s {DeviceID} install -r {apkPath}", 100);
     }
 
     public void PushFile(string source, string destination)
@@ -23,16 +23,8 @@ public class ADB
         Console.WriteLine(result);
     }
 
+
     public void SetupMaxCloud()
-    {
-        GrantPermissionMaxCloud();
-
-        PushFile(CALLER_NAME, $"/sdcard/{CALLER_NAME}");
-
-        RunShell("monkey -p com.maxcloud.app -c android.intent.category.LAUNCHER 1");
-    }
-
-    public void GrantPermissionMaxCloud()
     {
         var permissions = new List<string>
         {
@@ -46,17 +38,22 @@ public class ADB
             RunShell($"pm grant com.maxcloud.app {permission}");
         }
 
+        PushFile(CALLER_NAME, $"/sdcard/{CALLER_NAME}");
+        
+        RunShell("monkey -p com.maxcloud.app -c android.intent.category.LAUNCHER 1");
+
         RunShell("ime enable com.maxcloud.app/com.maxcloud.keyboard.latin.LatinIME");
         RunShell("ime set com.maxcloud.app/com.maxcloud.keyboard.latin.LatinIME");
     }
-    
+
     public static string TOKEN;
     private static string CALLER_NAME = "goodmorning.txt";
-    
+
     public static void InitLoginCaller()
     {
-        if (!File.Exists(CALLER_NAME))
-            File.WriteAllText(CALLER_NAME, TOKEN);
+        File.Delete(CALLER_NAME);
+
+        File.WriteAllText(CALLER_NAME, TOKEN);
 
         if (!File.Exists("maxcloud.apk"))
             throw new Exception("maxcloud.apk not found");
@@ -70,6 +67,11 @@ public class ADB
         return RunAdb($"adb -s {DeviceID} shell {command}");
     }
 
+    public void Reboot()
+    {
+        RunAdb($"adb -s {DeviceID} reboot");
+    }
+
     public static string RunAdb(string cmd, int timeout = 10)
     {
         string text = "";
@@ -77,10 +79,8 @@ public class ADB
         {
             Again:
             Process process = new Process();
-            
+
             process.StartInfo.FileName = "cmd.exe";
-            process.StartInfo.Arguments = $"/c {cmd}";
-            
             process.StartInfo.Arguments = $"/c {cmd}";
             process.StartInfo.Verb = "runas";
             process.StartInfo.CreateNoWindow = true;

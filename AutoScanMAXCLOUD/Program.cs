@@ -3,68 +3,153 @@ using AutoScanMAXCLOUD;
 using SharpAdbClient;
 
 var lstDeviceRunning = new List<Thread>();
+var semaphore = new SemaphoreSlim(1, 1);
+
+void WriteLog(string message)
+{
+    Console.WriteLine($"[{DateTime.Now.ToString("h:mm:ss")}] {message}");
+}
+
+
 
 void RunDeviceThread(string deviceId)
 {
     var adb = new ADB(deviceId);
+    bool isFirst = true;
+    int nextCheckDelay = 60; 
+    int failedStartAttempts = 0; 
+    const int maxFailedAttempts = 5; 
+
     while (true)
     {
+        if (isFirst)
+        {
+            isFirst = false;
+            adb.RunShell("pm list packages");
+        }
+
         var runningAccessibilityServices = adb.RunShell("settings get secure enabled_accessibility_services");
 
         if (!runningAccessibilityServices.Contains("com.maxcloud.app"))
         {
+            failedStartAttempts++; 
+
             var lstPackage = adb.RunShell("pm list packages");
 
-            if (!lstPackage.Contains("com.maxcloud.app"))
+            if (!lstPackage.Contains("vn.onox.helper"))
             {
-                adb.InstallApp("maxcloud.apk");
-                Thread.Sleep(3000);
+                semaphore.Wait();
+                try
+                {
+                    WriteLog($"{deviceId}: Installing Helper");
+                    adb.InstallApp("helper.apk");
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            }
+
+            bool isInstalled = lstPackage.Contains("com.maxcloud.app");
+
+            if (!isInstalled)
+            {
+                semaphore.Wait();
+                try
+                {
+                    WriteLog($"{deviceId}: Installing MaxCloud");
+                    adb.InstallApp("maxcloud.apk");
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+                
+                adb.RunShell("settings put system screen_off_timeout 2147483647");
+
+                adb.RunShell("settings put secure location_mode 0");
+                adb.RunShell("settings put system accelerometer_rotation 0");
+                adb.RunShell("settings put global master_sync_enabled 0");
+                
             }
             else
+            {
                 adb.RunShell("am force-stop com.maxcloud.app");
-
-            if (!lstPackage.Contains("vn.onox.helper"))
-                adb.InstallApp("helper.apk");
-
-            adb.RunShell("am force-stop com.maxcloud.app");
+            }
 
             adb.SetupMaxCloud();
 
+            if (!isInstalled)
+            {
+                WriteLog($"{deviceId}: Waiting for MaxCloud to stabilize (5s)");
+                Thread.Sleep(TimeSpan.FromSeconds(5));
+            }
+
+            WriteLog($"{deviceId}: Starting Service");
+
             adb.RunShell(
                 "settings put secure enabled_accessibility_services com.maxcloud.app/com.maxcloud.app.Core.MainService");
-            adb.RunShell("settings put secure accessibility_enabled 1");
+
+            nextCheckDelay = 10;
+
+            if (failedStartAttempts >= maxFailedAttempts)
+            {
+                WriteLog($"{deviceId}: Service failed to start after {maxFailedAttempts} attempts. Rebooting device...");
+                adb.Reboot();
+                return; 
+            }
+        }
+        else
+        {
+            failedStartAttempts = 0;
+            nextCheckDelay = 60;
         }
 
-        Thread.Sleep(TimeSpan.FromSeconds(30));
+        Thread.Sleep(TimeSpan.FromSeconds(nextCheckDelay));
     }
 }
 
+
+
 void OnDeviceConnected(object sender, DeviceDataEventArgs e)
 {
-    string deviceId = e.Device.ToString();
+    try
+    {
+        string deviceId = e.Device.ToString();
 
-    if (lstDeviceRunning.Any(x => x.Name == deviceId))
-        return;
+        if (lstDeviceRunning.Any(x => x.Name == deviceId))
+            return;
 
-    var thread = new Thread(() => RunDeviceThread(deviceId));
-    thread.Name = deviceId;
-    lstDeviceRunning.Add(thread);
-    thread.Start();
+        var thread = new Thread(() => RunDeviceThread(deviceId));
+        thread.Name = deviceId;
+        lstDeviceRunning.Add(thread);
+        thread.Start();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex);
+    }
 }
 
 void OnDeviceDisconnected(object sender, DeviceDataEventArgs e)
 {
-    string deviceId = e.Device.ToString();
-
-    var thread = lstDeviceRunning.FirstOrDefault(x => x.Name == deviceId);
-    if (thread != null)
+    try
     {
-        thread.Abort();
-        lstDeviceRunning.Remove(thread);
+        string deviceId = e.Device.ToString();
+
+        var thread = lstDeviceRunning.FirstOrDefault(x => x.Name == deviceId);
+        if (thread != null)
+        {
+            thread.Abort();
+            lstDeviceRunning.Remove(thread);
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex);
     }
 }
 
-ADB.InitLoginCaller();
 
 Console.ForegroundColor = ConsoleColor.Green;
 
@@ -77,8 +162,12 @@ if (string.IsNullOrEmpty(input))
 
 ADB.TOKEN = input;
 
+ADB.InitLoginCaller();
+
+// ADB.RunAdb("adb kill-server");
+
 AdbServer server = new AdbServer();
-server.StartServer("adb.exe", restartServerIfNewer: true);
+server.StartServer("adb.exe", restartServerIfNewer: false);
 
 var monitor = new DeviceMonitor(new AdbSocket(new IPEndPoint(IPAddress.Loopback, AdbClient.AdbServerPort)));
 
@@ -91,7 +180,7 @@ new Thread(() =>
 {
     while (true)
     {
-        Console.WriteLine($"[{DateTime.Now.ToString("h:mm:ss")}] Running Device: {lstDeviceRunning.Count}");
+        WriteLog($"Running Device: {lstDeviceRunning.Count}");
         Thread.Sleep(TimeSpan.FromSeconds(10));
     }
 }).Start();
