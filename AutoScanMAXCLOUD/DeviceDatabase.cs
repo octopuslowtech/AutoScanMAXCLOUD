@@ -1,54 +1,87 @@
-using Microsoft.Data.Sqlite;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 
-namespace AutoScanMAXCLOUD;
-
-public class DeviceDatabase
+namespace AutoScanMAXCLOUD
 {
-    private const string DATABASE_PATH = "devices.db";
-    private static bool _initialized = false;
-    private static readonly object _lock = new object();
-
-    public static void Initialize()
+    public static class DeviceDatabase
     {
-        lock (_lock)
+        private static readonly string DatabaseFilePath = "devices.txt";
+        private static readonly Dictionary<string, string> DeviceCache = new Dictionary<string, string>();
+        private static readonly object FileLock = new object();
+
+        static DeviceDatabase()
         {
-            if (_initialized) return;
-
-            using var connection = CreateConnection();
-            using var command = connection.CreateCommand();
-            command.CommandText = @"
-                    CREATE TABLE IF NOT EXISTS Devices (
-                        ProductNumber TEXT PRIMARY KEY,
-                        IpAddress TEXT,
-                        LastUpdated TEXT
-                    )";
-            command.ExecuteNonQuery();
-            _initialized = true;
+            LoadDeviceData();
         }
-    }
 
-    private static SqliteConnection CreateConnection()
-    {
-        var connection = new SqliteConnection($"Data Source={DATABASE_PATH}");
-        connection.Open();
-        return connection;
-    }
+        private static void LoadDeviceData()
+        {
+            lock (FileLock)
+            {
+                if (File.Exists(DatabaseFilePath))
+                {
+                    try
+                    {
+                        var lines = File.ReadAllLines(DatabaseFilePath);
+                        DeviceCache.Clear();
+                        
+                        foreach (var line in lines)
+                        {
+                            if (string.IsNullOrWhiteSpace(line)) continue;
+                            
+                            var parts = line.Split(',');
+                            if (parts.Length >= 2)
+                            {
+                                DeviceCache[parts[0].Trim()] = parts[1].Trim();
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Error loading device database: {ex.Message}");
+                    }
+                }
+            }
+        }
 
-    public static void SaveDeviceInfo(string productNumber, string ipAddress)
-    {
-        if (string.IsNullOrEmpty(productNumber)) return;
-        if (!_initialized) Initialize();
+        public static void SaveDeviceInfo(string productNumber, string ipAddress)
+        {
+            if (string.IsNullOrWhiteSpace(productNumber) || string.IsNullOrWhiteSpace(ipAddress))
+                return;
 
-        using var connection = CreateConnection();
-        using var command = connection.CreateCommand();
-        command.CommandText = @"
-                INSERT OR REPLACE INTO Devices (ProductNumber, IpAddress, LastUpdated)
-                VALUES (@productNumber, @ipAddress, @lastUpdated)";
+            lock (FileLock)
+            {
+                try
+                {
+                    DeviceCache[productNumber] = ipAddress;
+                    
+                    var deviceEntries = DeviceCache.Select(kvp => $"{kvp.Key},{kvp.Value}");
+                    File.WriteAllLines(DatabaseFilePath, deviceEntries);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error saving device info: {ex.Message}");
+                }
+            }
+        }
 
-        command.Parameters.AddWithValue("@productNumber", productNumber);
-        command.Parameters.AddWithValue("@ipAddress", ipAddress);
-        command.Parameters.AddWithValue("@lastUpdated", DateTime.Now.ToString("o"));
+        public static string GetIPAddressByProductNumber(string productNumber)
+        {
+            if (string.IsNullOrWhiteSpace(productNumber))
+                return null;
 
-        command.ExecuteNonQuery();
+            // Reload the database to ensure we have the latest data
+            LoadDeviceData();
+            
+            // Check if the product number exists in our cache
+            if (DeviceCache.TryGetValue(productNumber, out string ipAddress))
+            {
+                return ipAddress;
+            }
+            
+            return null;
+        }
     }
 }

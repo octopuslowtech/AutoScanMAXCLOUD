@@ -4,6 +4,9 @@ using AutoScanMAXCLOUD;
 using Newtonsoft.Json.Linq;
 using SharpAdbClient;
 
+
+ 
+
 var lstDeviceRunning = new List<Thread>();
 var semaphore = new SemaphoreSlim(3, 3);
 
@@ -208,68 +211,150 @@ void OnDeviceDisconnected(object sender, DeviceDataEventArgs e)
     }
 }
 
-
-Console.ForegroundColor = ConsoleColor.Green;
-
-ADB.TOKEN = GetToken();
-
-DeviceDatabase.Initialize();
-
-var files = Directory.GetFiles(Directory.GetCurrentDirectory(), "*.apk", SearchOption.AllDirectories)
-    .Where(x => x.Contains("MCP")).ToList();
-
-if (!files.Any())
-    throw new Exception("maxcloud.apk not found");
-
-
-ADB.RunAdb("adb kill-server");
-
-AdbServer server = new AdbServer();
-server.StartServer("adb", restartServerIfNewer: false);
-
-var monitor = new DeviceMonitor(new AdbSocket(new IPEndPoint(IPAddress.Loopback, AdbClient.AdbServerPort)));
-
-monitor.DeviceConnected += OnDeviceConnected;
-monitor.DeviceDisconnected += OnDeviceDisconnected;
-
-monitor.Start();
-
-new Thread(() =>
+void RunIPLookupMode()
 {
+    Console.Clear();
+    Console.WriteLine("===== IP Lookup Mode =====");
+    Console.WriteLine("Enter 'exit' to return to the main menu.\n");
+
     while (true)
     {
-        WriteLog($"Running Device: {lstDeviceRunning.Count}");
-        Thread.Sleep(TimeSpan.FromSeconds(10));
-    }
-}).Start();
-
-
-new Thread(() =>
-{
-    while (true)
-    {
-        var files = Directory.GetFiles(Directory.GetCurrentDirectory(), "*.apk", SearchOption.AllDirectories)
-            .Where(x => x.Contains("MCP")).ToList();
-
-        if (files.Any())
+        Console.Write("Enter product number: ");
+        string productNumber = Console.ReadLine()?.Trim();
+        
+        if (string.IsNullOrEmpty(productNumber))
         {
-            var latestFile = files.OrderByDescending(x => new FileInfo(x).LastWriteTime).FirstOrDefault();
-            
-            Constrants.MAXCLOUD_APK = latestFile.Split("/").Last();
-            
-            var version = Constrants.MAXCLOUD_APK
-                .Replace("MCP_v", "")
-                .Replace(".apk", "");
-            
-            Constrants.MAXCLOUD_VERSION = version;
+            Console.WriteLine("Product number cannot be empty. Please try again.");
+            continue;
+        }
+
+        if (productNumber.ToLower() == "exit")
+        {
+            Console.WriteLine("Returning to main menu...");
+            SelectMode();
+            return;
+        }
+
+        string ipAddress = DeviceDatabase.GetIPAddressByProductNumber(productNumber);
+        
+        if (string.IsNullOrEmpty(ipAddress))
+        {
+            Console.WriteLine($"No IP address found for product number: {productNumber}");
+        }
+        else
+        {
+            Console.WriteLine($"IP Address for {productNumber}: {ipAddress}");
         }
         
-        if (string.IsNullOrEmpty(Constrants.MAXCLOUD_APK))
-            WriteLog("MaxCloud APK not found");
-        
-        Thread.Sleep(TimeSpan.FromMinutes(10));
+        Console.WriteLine();
     }
-}).Start();
+}
 
+void RunDeviceManagementMode()
+{
+    Console.Clear();
+    Console.WriteLine("===== Device Management Mode =====");
+    
+    ADB.TOKEN = GetToken();
 
-Console.ReadKey();
+    var files = Directory.GetFiles(Directory.GetCurrentDirectory(), "*.apk", SearchOption.AllDirectories)
+        .Where(x => x.Contains("MCP")).ToList();
+
+    if (!files.Any())
+        throw new Exception("maxcloud.apk not found");
+
+    ADB.RunAdb("adb kill-server");
+
+    AdbServer server = new AdbServer();
+    server.StartServer("adb", restartServerIfNewer: false);
+
+    var monitor = new DeviceMonitor(new AdbSocket(new IPEndPoint(IPAddress.Loopback, AdbClient.AdbServerPort)));
+
+    monitor.DeviceConnected += OnDeviceConnected;
+    monitor.DeviceDisconnected += OnDeviceDisconnected;
+
+    monitor.Start();
+
+    new Thread(() =>
+    {
+        while (true)
+        {
+            WriteLog($"Running Device: {lstDeviceRunning.Count}");
+            Thread.Sleep(TimeSpan.FromSeconds(10));
+        }
+    }).Start();
+
+    new Thread(() =>
+    {
+        while (true)
+        {
+            var files = Directory.GetFiles(Directory.GetCurrentDirectory(), "*.apk", SearchOption.AllDirectories)
+                .Where(x => x.Contains("MCP")).ToList();
+
+            if (files.Any())
+            {
+                var latestFile = files.OrderByDescending(x => new FileInfo(x).LastWriteTime).FirstOrDefault();
+                
+                Constrants.MAXCLOUD_APK = latestFile.Split("/").Last();
+                
+                var version = Constrants.MAXCLOUD_APK
+                    .Replace("MCP_v", "")
+                    .Replace(".apk", "");
+                
+                Constrants.MAXCLOUD_VERSION = version;
+            }
+            
+            if (string.IsNullOrEmpty(Constrants.MAXCLOUD_APK))
+                WriteLog("MaxCloud APK not found");
+            
+            Thread.Sleep(TimeSpan.FromMinutes(10));
+        }
+    }).Start();
+
+    Console.WriteLine("\nPress any key to return to the mode selection...");
+    Console.ReadKey();
+    SelectMode();
+}
+
+void SelectMode()
+{
+    Console.Clear();
+    Console.ForegroundColor = ConsoleColor.Green;
+    
+    Console.WriteLine("===== AutoScanMAXCLOUD =====");
+    Console.WriteLine("1. Device Management Mode");
+    Console.WriteLine("2. IP Lookup Mode");
+    Console.WriteLine("0. Exit");
+    Console.Write("\nSelect mode: ");
+    
+    string input = Console.ReadLine()?.Trim();
+    
+    if (string.IsNullOrEmpty(input) || !int.TryParse(input, out int mode))
+    {
+        Console.WriteLine("Invalid selection. Please try again.");
+        Thread.Sleep(1500);
+        SelectMode();
+        return;
+    }
+    
+    switch (mode)
+    {
+        case (int)ProgramMode.DeviceManagement:
+            RunDeviceManagementMode();
+            break;
+        case (int)ProgramMode.IPLookup:
+            RunIPLookupMode();
+            break;
+        case 0:
+            Environment.Exit(0);
+            break;
+        default:
+            Console.WriteLine("Invalid selection. Please try again.");
+            Thread.Sleep(1500);
+            SelectMode();
+            break;
+    }
+}
+
+// Start the program with mode selection
+SelectMode();
