@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using System.IO;
+using System.Runtime.InteropServices;
 using AutoScanMAXCLOUD;
 using Newtonsoft.Json.Linq;
 using SharpAdbClient;
@@ -45,15 +46,17 @@ string GetToken()
 void RunDeviceThread(string deviceId)
 {
     var adb = new ADB(deviceId);
-    int delayTimeout = 60;
+    int delayTimeout = 60 * 1000; // 60 seconds
     int failedStartAttempts = 0;
     const int maxFailedAttempts = 5;
 
     while (true)
     {
-        var lstPackage = adb.RunShell("pm list packages");
+        var lstPackage = adb.RunShell("pm list packages -3");
         
-        if (!lstPackage.Contains(Constrants.MAXCLOUD_PACKAGE))
+        bool isInstalled = lstPackage.Contains(Constrants.MAXCLOUD_PACKAGE);
+        
+        if (!isInstalled)
         {
             semaphore.Wait();
             try
@@ -66,10 +69,11 @@ void RunDeviceThread(string deviceId)
             {
                 semaphore.Release();
             }
+            Thread.Sleep(TimeSpan.FromSeconds(10));
             continue;
         }
         
-        var statusDevice = adb.sendBroadcastMaxCloud(ADB.AdbCaller.PING_PING);
+        var statusDevice = adb.sendBroadcastMaxCloud(ADB.AdbCaller.PING_PONG);
 
         if (string.IsNullOrEmpty(statusDevice))
         {
@@ -92,12 +96,14 @@ void RunDeviceThread(string deviceId)
                     WriteLog($"{deviceId}: Update MaxCloud to {Constrants.MAXCLOUD_VERSION}");
                     string result = adb.InstallApp(Constrants.MAXCLOUD_APK);
                     WriteLog($"{deviceId} {result}");
+                    
+                    Thread.Sleep(TimeSpan.FromSeconds(10));
+                    continue;
                 }
                 finally
                 {
                     semaphore.Release();
                 }
-                continue;
             }
             
             bool isLogin = json["IS_LOGIN"].ToObject<bool>();
@@ -160,8 +166,9 @@ void RunDeviceThread(string deviceId)
             string productNumber = json["PRODUCT_NUMBER"].ToString();
             string ipAddress = json["IP_ADDRESS"].ToString();
             
-            DeviceDatabase.SaveDeviceInfo(productNumber, ipAddress);
-            
+            if(!string.IsNullOrEmpty(productNumber))
+                DeviceDatabase.SaveDeviceInfo(productNumber, ipAddress);
+
             Thread.Sleep(delayTimeout);
         }
         catch(Exception ex) 
@@ -266,7 +273,7 @@ void RunDeviceManagementMode()
     ADB.RunAdb("adb kill-server");
 
     AdbServer server = new AdbServer();
-    server.StartServer("adb", restartServerIfNewer: false);
+    server.StartServer(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "adb.exe" : "adb", restartServerIfNewer: false);
 
     var monitor = new DeviceMonitor(new AdbSocket(new IPEndPoint(IPAddress.Loopback, AdbClient.AdbServerPort)));
 
@@ -295,7 +302,8 @@ void RunDeviceManagementMode()
             {
                 var latestFile = files.OrderByDescending(x => new FileInfo(x).LastWriteTime).FirstOrDefault();
                 
-                Constrants.MAXCLOUD_APK = latestFile.Split("/").Last();
+                
+                Constrants.MAXCLOUD_APK = latestFile.Split(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "\\" : "/").Last();
                 
                 var version = Constrants.MAXCLOUD_APK
                     .Replace("MCP_v", "")
