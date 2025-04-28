@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using System.IO;
 using AutoScanMAXCLOUD;
 using Newtonsoft.Json.Linq;
 using SharpAdbClient;
@@ -6,11 +7,37 @@ using SharpAdbClient;
 var lstDeviceRunning = new List<Thread>();
 var semaphore = new SemaphoreSlim(3, 3);
 
+const string tokenFilePath = "token.txt";
+
 void WriteLog(string message)
 {
     Console.WriteLine($"[{DateTime.Now.ToString("h:mm:ss")}] {message}");
 }
 
+string GetToken()
+{
+    if (File.Exists(tokenFilePath))
+    {
+        string savedToken = File.ReadAllText(tokenFilePath);
+        Console.WriteLine($"Found saved token: {savedToken}");
+        Console.WriteLine("Do you want to continue with this token? (y/n): ");
+        string choice = Console.ReadLine()?.Trim().ToLower();
+
+        if (choice == "y")
+        {
+            return savedToken;
+        }
+    }
+
+    Console.WriteLine("Input your token here: ");
+    string input = Console.ReadLine();
+
+    if (string.IsNullOrEmpty(input))
+        throw new Exception("Token is required");
+
+    File.WriteAllText(tokenFilePath, input);
+    return input;
+}
 
 void RunDeviceThread(string deviceId)
 {
@@ -184,21 +211,14 @@ void OnDeviceDisconnected(object sender, DeviceDataEventArgs e)
 
 Console.ForegroundColor = ConsoleColor.Green;
 
-Console.WriteLine("Input your token here: ");
-
-string input = Console.ReadLine();
-
-if (string.IsNullOrEmpty(input))
-    throw new Exception("Token is required");
-
-ADB.TOKEN = input;
+ADB.TOKEN = GetToken();
 
 DeviceDatabase.Initialize();
 
 var files = Directory.GetFiles(Directory.GetCurrentDirectory(), "*.apk", SearchOption.AllDirectories)
     .Where(x => x.Contains("MCP")).ToList();
 
-if (files.Any())
+if (!files.Any())
     throw new Exception("maxcloud.apk not found");
 
 
