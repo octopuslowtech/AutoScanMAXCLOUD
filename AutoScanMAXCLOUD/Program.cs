@@ -1,9 +1,10 @@
 ﻿using System.Net;
 using AutoScanMAXCLOUD;
+using Newtonsoft.Json.Linq;
 using SharpAdbClient;
 
 var lstDeviceRunning = new List<Thread>();
-var semaphore = new SemaphoreSlim(1, 1);
+var semaphore = new SemaphoreSlim(3, 3);
 
 void WriteLog(string message)
 {
@@ -11,104 +12,135 @@ void WriteLog(string message)
 }
 
 
-
 void RunDeviceThread(string deviceId)
 {
     var adb = new ADB(deviceId);
-    bool isFirst = true;
-    int nextCheckDelay = 60; 
-    int failedStartAttempts = 0; 
-    const int maxFailedAttempts = 5; 
+    int delayTimeout = 60;
+    int failedStartAttempts = 0;
+    const int maxFailedAttempts = 5;
 
     while (true)
     {
-        if (isFirst)
+        var lstPackage = adb.RunShell("pm list packages");
+        
+        if (!lstPackage.Contains(Constrants.MAXCLOUD_PACKAGE))
         {
-            isFirst = false;
-            adb.RunShell("pm list packages");
+            semaphore.Wait();
+            try
+            {
+                WriteLog($"{deviceId}: Installing MaxCloud");
+                string result = adb.InstallApp(Constrants.MAXCLOUD_APK);
+                WriteLog($"{deviceId} {result}");
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+            continue;
+        }
+        
+        var statusDevice = adb.sendBroadcastMaxCloud(ADB.AdbCaller.PING_PING);
+
+        if (string.IsNullOrEmpty(statusDevice))
+        {
+            WriteLog($"{deviceId}: PING_PONG failed");
+            Thread.Sleep(delayTimeout);
+            continue;
         }
 
-        var runningAccessibilityServices = adb.RunShell("settings get secure enabled_accessibility_services");
-
-        if (!runningAccessibilityServices.Contains("com.maxcloud.app"))
+        try
         {
-            failedStartAttempts++; 
+            var json = JObject.Parse(statusDevice);
+        
+            string version = json["APP_VERSION"].ToString();
 
-            var lstPackage = adb.RunShell("pm list packages");
-
-            if (!lstPackage.Contains("vn.onox.helper"))
+            if (version != Constrants.MAXCLOUD_VERSION)
             {
                 semaphore.Wait();
                 try
                 {
-                    WriteLog($"{deviceId}: Installing Helper");
-                    adb.InstallApp("helper.apk");
+                    WriteLog($"{deviceId}: Update MaxCloud to {Constrants.MAXCLOUD_VERSION}");
+                    string result = adb.InstallApp(Constrants.MAXCLOUD_APK);
+                    WriteLog($"{deviceId} {result}");
                 }
                 finally
                 {
                     semaphore.Release();
                 }
+                continue;
             }
-
-            bool isInstalled = lstPackage.Contains("com.maxcloud.app");
-
-            if (!isInstalled)
+            
+            bool isLogin = json["IS_LOGIN"].ToObject<bool>();
+            
+            if (!isLogin)
             {
-                semaphore.Wait();
-                try
-                {
-                    WriteLog($"{deviceId}: Installing MaxCloud");
-                    adb.InstallApp("maxcloud.apk");
-                }
-                finally
-                {
-                    semaphore.Release();
-                }
-                
-                adb.RunShell("settings put system screen_off_timeout 2147483647");
+                adb.SetupMaxCloud();
 
-                adb.RunShell("settings put secure location_mode 0");
-                adb.RunShell("settings put system accelerometer_rotation 0");
-                adb.RunShell("settings put global master_sync_enabled 0");
+                WriteLog($"{deviceId}: START LOGIN DEVICE");
                 
+                var loginResult = adb.sendBroadcastMaxCloud(ADB.AdbCaller.LOGIN_DEVICE);
+
+                if (string.IsNullOrEmpty(loginResult))
+                {
+                    WriteLog($"{deviceId}: LOGIN DEVICE failed");
+                    Thread.Sleep(delayTimeout);
+                    continue;
+                }
+                
+                var jsonLogin = JObject.Parse(loginResult);
+                
+                string status = jsonLogin["MESSAGE"].ToString();
+                
+                if (status != "LOGIN_SUCCESS")
+                {
+                    WriteLog($"{deviceId}: {status}");
+                    Thread.Sleep(delayTimeout);
+                    continue;
+                }
+                WriteLog($"{deviceId}: LOGIN DEVICE success");
+            }
+            
+            bool isRunning = json["IS_RUNNING"].ToObject<bool>();
+            
+            if (!isRunning)
+            {
+                failedStartAttempts++;
+                
+                if (failedStartAttempts >= maxFailedAttempts)
+                {
+                    WriteLog(
+                        $"{deviceId}: Service failed to start after {maxFailedAttempts} attempts. Rebooting device...");
+                    adb.Reboot();
+                    return;
+                }
+                
+                if(isLogin)
+                    adb.SetupMaxCloud();
+
+                adb.RunShell("am force-stop com.maxcloud.app");
+                
+                adb.RunShell(
+                    "settings put secure enabled_accessibility_services com.maxcloud.app/com.maxcloud.app.Core.MainService");
             }
             else
             {
-                adb.RunShell("am force-stop com.maxcloud.app");
+                failedStartAttempts = 0;
             }
-
-            adb.SetupMaxCloud();
-
-            if (!isInstalled)
-            {
-                WriteLog($"{deviceId}: Waiting for MaxCloud to stabilize (5s)");
-                Thread.Sleep(TimeSpan.FromSeconds(5));
-            }
-
-            WriteLog($"{deviceId}: Starting Service");
-
-            adb.RunShell(
-                "settings put secure enabled_accessibility_services com.maxcloud.app/com.maxcloud.app.Core.MainService");
-
-            nextCheckDelay = 10;
-
-            if (failedStartAttempts >= maxFailedAttempts)
-            {
-                WriteLog($"{deviceId}: Service failed to start after {maxFailedAttempts} attempts. Rebooting device...");
-                adb.Reboot();
-                return; 
-            }
+            
+            string productNumber = json["PRODUCT_NUMBER"].ToString();
+            string ipAddress = json["IP_ADDRESS"].ToString();
+            
+            DeviceDatabase.SaveDeviceInfo(productNumber, ipAddress);
+            
+            Thread.Sleep(delayTimeout);
         }
-        else
+        catch(Exception ex) 
         {
-            failedStartAttempts = 0;
-            nextCheckDelay = 60;
+            WriteLog($"{deviceId}: {ex.Message}");
+            Thread.Sleep(delayTimeout);
         }
-
-        Thread.Sleep(TimeSpan.FromSeconds(nextCheckDelay));
     }
 }
-
 
 
 void OnDeviceConnected(object sender, DeviceDataEventArgs e)
@@ -144,9 +176,8 @@ void OnDeviceDisconnected(object sender, DeviceDataEventArgs e)
             lstDeviceRunning.Remove(thread);
         }
     }
-    catch (Exception ex)
+    catch
     {
-        Console.WriteLine(ex);
     }
 }
 
@@ -162,12 +193,19 @@ if (string.IsNullOrEmpty(input))
 
 ADB.TOKEN = input;
 
-ADB.InitLoginCaller();
+DeviceDatabase.Initialize();
 
-// ADB.RunAdb("adb kill-server");
+var files = Directory.GetFiles(Directory.GetCurrentDirectory(), "*.apk", SearchOption.AllDirectories)
+    .Where(x => x.Contains("MCP")).ToList();
+
+if (files.Any())
+    throw new Exception("maxcloud.apk not found");
+
+
+ADB.RunAdb("adb kill-server");
 
 AdbServer server = new AdbServer();
-server.StartServer("adb.exe", restartServerIfNewer: false);
+server.StartServer("adb", restartServerIfNewer: false);
 
 var monitor = new DeviceMonitor(new AdbSocket(new IPEndPoint(IPAddress.Loopback, AdbClient.AdbServerPort)));
 
@@ -182,6 +220,34 @@ new Thread(() =>
     {
         WriteLog($"Running Device: {lstDeviceRunning.Count}");
         Thread.Sleep(TimeSpan.FromSeconds(10));
+    }
+}).Start();
+
+
+new Thread(() =>
+{
+    while (true)
+    {
+        var files = Directory.GetFiles(Directory.GetCurrentDirectory(), "*.apk", SearchOption.AllDirectories)
+            .Where(x => x.Contains("MCP")).ToList();
+
+        if (files.Any())
+        {
+            var latestFile = files.OrderByDescending(x => new FileInfo(x).LastWriteTime).FirstOrDefault();
+            
+            Constrants.MAXCLOUD_APK = latestFile.Split("/").Last();
+            
+            var version = Constrants.MAXCLOUD_APK
+                .Replace("MCP_v", "")
+                .Replace(".apk", "");
+            
+            Constrants.MAXCLOUD_VERSION = version;
+        }
+        
+        if (string.IsNullOrEmpty(Constrants.MAXCLOUD_APK))
+            WriteLog("MaxCloud APK not found");
+        
+        Thread.Sleep(TimeSpan.FromMinutes(10));
     }
 }).Start();
 

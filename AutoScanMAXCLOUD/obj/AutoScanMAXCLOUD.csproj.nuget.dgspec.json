@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "/home/octopus/Desktop/driveD/CloudPhone/AutoScanMAXCLOUD/AutoScanMAXCLOUD/AutoScanMAXCLOUD.csproj": {}
+    "/home/octopus/driveD/CloudPhone/AutoScanMAXCLOUD/AutoScanMAXCLOUD/AutoScanMAXCLOUD.csproj": {}
   },
   "projects": {
-    "/home/octopus/Desktop/driveD/CloudPhone/AutoScanMAXCLOUD/AutoScanMAXCLOUD/AutoScanMAXCLOUD.csproj": {
+    "/home/octopus/driveD/CloudPhone/AutoScanMAXCLOUD/AutoScanMAXCLOUD/AutoScanMAXCLOUD.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/home/octopus/Desktop/driveD/CloudPhone/AutoScanMAXCLOUD/AutoScanMAXCLOUD/AutoScanMAXCLOUD.csproj",
+        "projectUniqueName": "/home/octopus/driveD/CloudPhone/AutoScanMAXCLOUD/AutoScanMAXCLOUD/AutoScanMAXCLOUD.csproj",
         "projectName": "AutoScanMAXCLOUD",
-        "projectPath": "/home/octopus/Desktop/driveD/CloudPhone/AutoScanMAXCLOUD/AutoScanMAXCLOUD/AutoScanMAXCLOUD.csproj",
+        "projectPath": "/home/octopus/driveD/CloudPhone/AutoScanMAXCLOUD/AutoScanMAXCLOUD/AutoScanMAXCLOUD.csproj",
         "packagesPath": "/home/octopus/.nuget/packages/",
-        "outputPath": "/home/octopus/Desktop/driveD/CloudPhone/AutoScanMAXCLOUD/AutoScanMAXCLOUD/obj/",
+        "outputPath": "/home/octopus/driveD/CloudPhone/AutoScanMAXCLOUD/AutoScanMAXCLOUD/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "/home/octopus/.nuget/NuGet/NuGet.Config"
@@ -20,7 +20,6 @@
           "net9.0"
         ],
         "sources": {
-          "/usr/lib/dotnet/library-packs": {},
           "https://api.nuget.org/v3/index.json": {}
         },
         "frameworks": {
@@ -39,12 +38,20 @@
           "auditLevel": "low",
           "auditMode": "direct"
         },
-        "SdkAnalysisLevel": "9.0.100"
+        "SdkAnalysisLevel": "9.0.200"
       },
       "frameworks": {
         "net9.0": {
           "targetAlias": "net9.0",
           "dependencies": {
+            "Microsoft.Data.Sqlite": {
+              "target": "Package",
+              "version": "[10.0.0-preview.3.25171.6, )"
+            },
+            "Newtonsoft.Json": {
+              "target": "Package",
+              "version": "[13.0.3, )"
+            },
             "SharpAdbClient": {
               "target": "Package",
               "version": "[2.3.23, )"
@@ -66,7 +73,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "/usr/lib/dotnet/sdk/9.0.103/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "/home/octopus/.dotnet/sdk/9.0.200/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

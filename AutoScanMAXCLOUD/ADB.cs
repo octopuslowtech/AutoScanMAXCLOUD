@@ -1,5 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Text;
+using System.Text.RegularExpressions;
+using Newtonsoft.Json.Linq;
 
 namespace AutoScanMAXCLOUD;
 
@@ -14,7 +16,7 @@ public class ADB
 
     public string InstallApp(string apkPath)
     {
-        return RunAdb($"adb -s {DeviceID} install -r {apkPath}", 100);
+        return RunAdb($"adb -s {DeviceID} install -r {apkPath}", 60);
     }
 
     public void PushFile(string source, string destination)
@@ -23,7 +25,6 @@ public class ADB
         Console.WriteLine(result);
     }
 
-
     public void SetupMaxCloud()
     {
         var permissions = new List<string>
@@ -31,37 +32,42 @@ public class ADB
             "android.permission.NOTIFICATION_SERVICE",
             "android.permission.READ_EXTERNAL_STORAGE",
             "android.permission.WRITE_EXTERNAL_STORAGE",
+            "android.permission.CHANGE_CONFIGURATION",
         };
 
         foreach (var permission in permissions)
         {
             RunShell($"pm grant com.maxcloud.app {permission}");
         }
-
-        PushFile(CALLER_NAME, $"/sdcard/{CALLER_NAME}");
         
-        RunShell("monkey -p com.maxcloud.app -c android.intent.category.LAUNCHER 1");
-
-        RunShell("ime enable com.maxcloud.app/com.maxcloud.keyboard.latin.LatinIME");
-        RunShell("ime set com.maxcloud.app/com.maxcloud.keyboard.latin.LatinIME");
+        // RunShell("monkey -p com.maxcloud.app -c android.intent.category.LAUNCHER 1");
     }
 
     public static string TOKEN;
-    private static string CALLER_NAME = "goodmorning.txt";
-
-    public static void InitLoginCaller()
+    
+    public enum AdbCaller
     {
-        File.Delete(CALLER_NAME);
-
-        File.WriteAllText(CALLER_NAME, TOKEN);
-
-        if (!File.Exists("maxcloud.apk"))
-            throw new Exception("maxcloud.apk not found");
-
-        if (!File.Exists("helper.apk"))
-            throw new Exception("maxcloud.apk not found");
+        PING_PING,
+        LOGIN_DEVICE
     }
+    
+    public string sendBroadcastMaxCloud(AdbCaller action = AdbCaller.PING_PING)
+    {
+        string shellCommand = $"am broadcast -a com.maxcloud.app.{action.ToString()} -n com.maxcloud.app/.AdbCaller";
+     
+        if (action == AdbCaller.LOGIN_DEVICE)
+            shellCommand += $" -e token {TOKEN}";
 
+        string adbOutput = RunShell(shellCommand);
+        
+        Match match = Regex.Match(adbOutput, @"data=""({.*?})""");
+
+        if (!match.Success)
+            return string.Empty;
+
+        return match.Groups[1].Value ?? string.Empty;
+    }
+   
     public string RunShell(string command)
     {
         return RunAdb($"adb -s {DeviceID} shell {command}");
