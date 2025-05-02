@@ -64,7 +64,10 @@ public class ADB
         Match match = Regex.Match(adbOutput, @"data=""({.*?})""");
 
         if (!match.Success)
+        {
+            RunShell("monkey -p com.maxcloud.app -c android.intent.category.LAUNCHER 1");
             return string.Empty;
+        }
 
         return match.Groups[1].Value ?? string.Empty;
     }

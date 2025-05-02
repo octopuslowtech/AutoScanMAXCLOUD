@@ -1,12 +1,8 @@
 ﻿using System.Net;
-using System.IO;
 using System.Runtime.InteropServices;
 using AutoScanMAXCLOUD;
 using Newtonsoft.Json.Linq;
 using SharpAdbClient;
-
-
- 
 
 var lstDeviceRunning = new List<Thread>();
 var semaphore = new SemaphoreSlim(3, 3);
@@ -28,9 +24,7 @@ string GetToken()
         string choice = Console.ReadLine()?.Trim().ToLower();
 
         if (choice == "y")
-        {
             return savedToken;
-        }
     }
 
     Console.WriteLine("Input your token here: ");
@@ -46,7 +40,7 @@ string GetToken()
 void RunDeviceThread(string deviceId)
 {
     var adb = new ADB(deviceId);
-    int delayTimeout = 60 * 1000; // 60 seconds
+    int delayTimeout = 60 * 1000;
     int failedStartAttempts = 0;
     const int maxFailedAttempts = 5;
 
@@ -63,13 +57,12 @@ void RunDeviceThread(string deviceId)
             {
                 WriteLog($"{deviceId}: Installing MaxCloud");
                 string result = adb.InstallApp(Constrants.MAXCLOUD_APK);
-                WriteLog($"{deviceId} {result}");
             }
             finally
             {
                 semaphore.Release();
             }
-            Thread.Sleep(TimeSpan.FromSeconds(10));
+            Thread.Sleep(TimeSpan.FromSeconds(5));
             continue;
         }
         
@@ -78,7 +71,9 @@ void RunDeviceThread(string deviceId)
         if (string.IsNullOrEmpty(statusDevice))
         {
             WriteLog($"{deviceId}: PING_PONG failed");
-            Thread.Sleep(delayTimeout);
+            
+            Thread.Sleep(TimeSpan.FromSeconds(5));
+
             continue;
         }
 
@@ -97,7 +92,7 @@ void RunDeviceThread(string deviceId)
                     string result = adb.InstallApp(Constrants.MAXCLOUD_APK);
                     WriteLog($"{deviceId} {result}");
                     
-                    Thread.Sleep(TimeSpan.FromSeconds(10));
+                    Thread.Sleep(TimeSpan.FromSeconds(5));
                     continue;
                 }
                 finally
@@ -119,7 +114,7 @@ void RunDeviceThread(string deviceId)
                 if (string.IsNullOrEmpty(loginResult))
                 {
                     WriteLog($"{deviceId}: LOGIN DEVICE failed");
-                    Thread.Sleep(delayTimeout);
+                    Thread.Sleep(TimeSpan.FromSeconds(5));
                     continue;
                 }
                 
@@ -130,7 +125,7 @@ void RunDeviceThread(string deviceId)
                 if (status != "LOGIN_SUCCESS")
                 {
                     WriteLog($"{deviceId}: {status}");
-                    Thread.Sleep(delayTimeout);
+                    Thread.Sleep(TimeSpan.FromSeconds(5));
                     continue;
                 }
                 WriteLog($"{deviceId}: LOGIN DEVICE success");
@@ -270,7 +265,7 @@ void RunDeviceManagementMode()
     if (!files.Any())
         throw new Exception("maxcloud.apk not found");
 
-    ADB.RunAdb("adb kill-server");
+    // ADB.RunAdb("adb kill-server");
 
     AdbServer server = new AdbServer();
     server.StartServer(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "adb.exe" : "adb", restartServerIfNewer: false);
@@ -315,7 +310,7 @@ void RunDeviceManagementMode()
             if (string.IsNullOrEmpty(Constrants.MAXCLOUD_APK))
                 WriteLog("MaxCloud APK not found");
             
-            Thread.Sleep(TimeSpan.FromMinutes(10));
+            Thread.Sleep(TimeSpan.FromMinutes(1));
         }
     }).Start();
 
