@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -17,7 +18,7 @@ public class ADB
 
     public string InstallApp(string apkPath)
     {
-        return RunAdb($"adb -s {DeviceID} install -r {apkPath}", 60);
+        return RunAdb($"adb -s {DeviceID} install -r {apkPath}", 100);
     }
 
     public void PushFile(string source, string destination)
@@ -26,6 +27,12 @@ public class ADB
         Console.WriteLine(result);
     }
 
+    public string GetState()
+    {
+        string result = RunAdb($"adb -s {DeviceID} get-state");
+        return result;
+    }
+    
     public void SetupMaxCloud()
     {
         var permissions = new List<string>
@@ -82,6 +89,35 @@ public class ADB
         RunAdb($"adb -s {DeviceID} reboot");
     }
 
+    // tao 1 ham static chay scrspy voi device id
+    
+    public static string RunScrcpy(string deviceID)
+    {
+        string scrcpyPath = Path.Combine(AppContext.BaseDirectory, "scrcpy", "scrcpy.exe");
+        string scrcpyCommand = $"\"{scrcpyPath}\" -s {deviceID} --window-title \"{deviceID}\"";
+        return RunAdb(scrcpyCommand);
+    }
+    
+    public static void ScanDevice(string ip, string port, CancellationToken token)
+    {
+        try
+        {
+            using (TcpClient client = new TcpClient())
+            {
+                var connectTask = client.ConnectAsync(ip, int.Parse(port));
+
+                if (!connectTask.Wait(TimeSpan.FromSeconds(5), token))
+                    return; 
+
+                 RunAdb($"adb connect {ip}:{port}", 5);
+            }
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+   
     public static string RunAdb(string cmd, int timeout = 10)
     {
         string text = "";

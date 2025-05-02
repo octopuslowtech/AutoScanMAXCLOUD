@@ -5,7 +5,7 @@ using Newtonsoft.Json.Linq;
 using SharpAdbClient;
 
 var lstDeviceRunning = new List<Thread>();
-var semaphore = new SemaphoreSlim(3, 3);
+var semaphore = new SemaphoreSlim(20, 20);
 
 const string tokenFilePath = "token.txt";
 
@@ -46,41 +46,73 @@ void RunDeviceThread(string deviceId)
 
     while (true)
     {
+        var deviceState = adb.GetState();
+
+        if (string.IsNullOrEmpty(deviceState))
+        {
+            Thread.Sleep(TimeSpan.FromSeconds(5));
+            continue;
+        }
+        
+        if (deviceState == "recovery")
+        {
+            adb.RunShell("twrp wipe data");
+            Thread.Sleep(TimeSpan.FromSeconds(3));
+
+            adb.RunShell("twrp wipe cache");
+            Thread.Sleep(TimeSpan.FromSeconds(3));
+
+            adb.RunShell("twrp wipe dalvik");
+            Thread.Sleep(TimeSpan.FromSeconds(3));
+
+            adb.RunShell("rm -rf /sdcard/*");
+            Thread.Sleep(TimeSpan.FromSeconds(3));
+
+            adb.RunShell("reboot system");
+
+            Thread.Sleep(TimeSpan.FromSeconds(60));
+            continue;
+        }
+        
+        if(deviceState != "device")
+        {
+            Thread.Sleep(TimeSpan.FromSeconds(5));
+            continue;
+        }
+        
         var lstPackage = adb.RunShell("pm list packages -3");
-        
+
         bool isInstalled = lstPackage.Contains(Constrants.MAXCLOUD_PACKAGE);
-        
+
         if (!isInstalled)
         {
             semaphore.Wait();
             try
             {
                 WriteLog($"{deviceId}: Installing MaxCloud");
-                string result = adb.InstallApp(Constrants.MAXCLOUD_APK);
+                 adb.InstallApp(Constrants.MAXCLOUD_APK);
             }
             finally
             {
                 semaphore.Release();
             }
+
             Thread.Sleep(TimeSpan.FromSeconds(5));
             continue;
         }
-        
+
         var statusDevice = adb.sendBroadcastMaxCloud(ADB.AdbCaller.PING_PONG);
 
         if (string.IsNullOrEmpty(statusDevice))
         {
-            WriteLog($"{deviceId}: PING_PONG failed");
-            
             Thread.Sleep(TimeSpan.FromSeconds(5));
-
             continue;
         }
 
         try
         {
             var json = JObject.Parse(statusDevice);
-        
+
             string version = json["APP_VERSION"].ToString();
 
             if (version != Constrants.MAXCLOUD_VERSION)
@@ -91,7 +123,7 @@ void RunDeviceThread(string deviceId)
                     WriteLog($"{deviceId}: Update MaxCloud to {Constrants.MAXCLOUD_VERSION}");
                     string result = adb.InstallApp(Constrants.MAXCLOUD_APK);
                     WriteLog($"{deviceId} {result}");
-                    
+
                     Thread.Sleep(TimeSpan.FromSeconds(5));
                     continue;
                 }
@@ -100,15 +132,15 @@ void RunDeviceThread(string deviceId)
                     semaphore.Release();
                 }
             }
-            
+
             bool isLogin = json["IS_LOGIN"].ToObject<bool>();
-            
+
             if (!isLogin)
             {
                 adb.SetupMaxCloud();
 
                 WriteLog($"{deviceId}: START LOGIN DEVICE");
-                
+
                 var loginResult = adb.sendBroadcastMaxCloud(ADB.AdbCaller.LOGIN_DEVICE);
 
                 if (string.IsNullOrEmpty(loginResult))
@@ -117,26 +149,25 @@ void RunDeviceThread(string deviceId)
                     Thread.Sleep(TimeSpan.FromSeconds(5));
                     continue;
                 }
-                
+
                 var jsonLogin = JObject.Parse(loginResult);
-                
+
                 string status = jsonLogin["MESSAGE"].ToString();
-                
+
                 if (status != "LOGIN_SUCCESS")
                 {
                     WriteLog($"{deviceId}: {status}");
                     Thread.Sleep(TimeSpan.FromSeconds(5));
                     continue;
                 }
-                WriteLog($"{deviceId}: LOGIN DEVICE success");
             }
-            
+
             bool isRunning = json["IS_RUNNING"].ToObject<bool>();
-            
+
             if (!isRunning)
             {
                 failedStartAttempts++;
-                
+
                 if (failedStartAttempts >= maxFailedAttempts)
                 {
                     WriteLog(
@@ -144,12 +175,12 @@ void RunDeviceThread(string deviceId)
                     adb.Reboot();
                     return;
                 }
-                
-                if(isLogin)
+
+                if (isLogin)
                     adb.SetupMaxCloud();
 
                 adb.RunShell("am force-stop com.maxcloud.app");
-                
+
                 adb.RunShell(
                     "settings put secure enabled_accessibility_services com.maxcloud.app/com.maxcloud.app.Core.MainService");
             }
@@ -157,16 +188,16 @@ void RunDeviceThread(string deviceId)
             {
                 failedStartAttempts = 0;
             }
-            
+
             string productNumber = json["PRODUCT_NUMBER"].ToString();
             string ipAddress = json["IP_ADDRESS"].ToString();
-            
-            if(!string.IsNullOrEmpty(productNumber))
+
+            if (!string.IsNullOrEmpty(productNumber))
                 DeviceDatabase.SaveDeviceInfo(productNumber, ipAddress);
 
             Thread.Sleep(delayTimeout);
         }
-        catch(Exception ex) 
+        catch (Exception ex)
         {
             WriteLog($"{deviceId}: {ex.Message}");
             Thread.Sleep(delayTimeout);
@@ -174,13 +205,12 @@ void RunDeviceThread(string deviceId)
     }
 }
 
-
 void OnDeviceConnected(object sender, DeviceDataEventArgs e)
 {
     try
     {
         string deviceId = e.Device.ToString();
-
+        
         if (lstDeviceRunning.Any(x => x.Name == deviceId))
             return;
 
@@ -223,7 +253,7 @@ void RunIPLookupMode()
     {
         Console.Write("Enter product number: ");
         string productNumber = Console.ReadLine()?.Trim();
-        
+
         if (string.IsNullOrEmpty(productNumber))
         {
             Console.WriteLine("Product number cannot be empty. Please try again.");
@@ -238,7 +268,7 @@ void RunIPLookupMode()
         }
 
         string ipAddress = DeviceDatabase.GetIPAddressByProductNumber(productNumber);
-        
+
         if (string.IsNullOrEmpty(ipAddress))
         {
             Console.WriteLine($"No IP address found for product number: {productNumber}");
@@ -246,8 +276,9 @@ void RunIPLookupMode()
         else
         {
             Console.WriteLine($"IP Address for {productNumber}: {ipAddress}");
+            ADB.RunScrcpy($"{ipAddress}:5555");
         }
-        
+
         Console.WriteLine();
     }
 }
@@ -256,7 +287,7 @@ void RunDeviceManagementMode()
 {
     Console.Clear();
     Console.WriteLine("===== Device Management Mode =====");
-    
+
     ADB.TOKEN = GetToken();
 
     var files = Directory.GetFiles(Directory.GetCurrentDirectory(), "*.apk", SearchOption.AllDirectories)
@@ -265,10 +296,36 @@ void RunDeviceManagementMode()
     if (!files.Any())
         throw new Exception("maxcloud.apk not found");
 
+    new Thread(() =>
+    {
+        List<string> baseIPs = File.ReadAllLines("address.txt")
+            .Where(x => x.Length > 0)
+            .ToList();
+        
+        if(!baseIPs.Any())
+            throw new Exception("address.txt not found");
+        
+        while (true)
+        {
+            foreach (string ip in baseIPs)
+            {
+                Parallel.For(1, 255, new ParallelOptions { }, i =>
+                {
+                    string scanIP = $"{ip}.{i}";
+                    ADB.ScanDevice(scanIP,"5555", CancellationToken.None);
+                });
+            }
+
+            Thread.Sleep(TimeSpan.FromSeconds(30));
+        }
+    }).Start();
+
+
     // ADB.RunAdb("adb kill-server");
 
     AdbServer server = new AdbServer();
-    server.StartServer(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "adb.exe" : "adb", restartServerIfNewer: false);
+    server.StartServer(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "adb.exe" : "adb",
+        restartServerIfNewer: false);
 
     var monitor = new DeviceMonitor(new AdbSocket(new IPEndPoint(IPAddress.Loopback, AdbClient.AdbServerPort)));
 
@@ -296,42 +353,42 @@ void RunDeviceManagementMode()
             if (files.Any())
             {
                 var latestFile = files.OrderByDescending(x => new FileInfo(x).LastWriteTime).FirstOrDefault();
-                
-                
-                Constrants.MAXCLOUD_APK = latestFile.Split(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "\\" : "/").Last();
-                
+
+
+                Constrants.MAXCLOUD_APK =
+                    latestFile.Split(RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "\\" : "/").Last();
+
                 var version = Constrants.MAXCLOUD_APK
                     .Replace("MCP_v", "")
                     .Replace(".apk", "");
-                
+
                 Constrants.MAXCLOUD_VERSION = version;
             }
-            
+
             if (string.IsNullOrEmpty(Constrants.MAXCLOUD_APK))
                 WriteLog("MaxCloud APK not found");
-            
+
             Thread.Sleep(TimeSpan.FromMinutes(1));
         }
     }).Start();
 
-    Console.WriteLine("\nPress any key to return to the mode selection...");
+
     Console.ReadKey();
-    SelectMode();
 }
 
 void SelectMode()
 {
     Console.Clear();
     Console.ForegroundColor = ConsoleColor.Green;
-    
+
     Console.WriteLine("===== AutoScanMAXCLOUD =====");
     Console.WriteLine("1. Device Management Mode");
     Console.WriteLine("2. IP Lookup Mode");
     Console.WriteLine("0. Exit");
     Console.Write("\nSelect mode: ");
-    
+
     string input = Console.ReadLine()?.Trim();
-    
+
     if (string.IsNullOrEmpty(input) || !int.TryParse(input, out int mode))
     {
         Console.WriteLine("Invalid selection. Please try again.");
@@ -339,7 +396,7 @@ void SelectMode()
         SelectMode();
         return;
     }
-    
+
     switch (mode)
     {
         case (int)ProgramMode.DeviceManagement:
@@ -359,5 +416,4 @@ void SelectMode()
     }
 }
 
-// Start the program with mode selection
 SelectMode();
