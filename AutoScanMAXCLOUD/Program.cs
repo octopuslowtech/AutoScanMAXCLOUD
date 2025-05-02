@@ -40,7 +40,7 @@ string GetToken()
 void RunDeviceThread(string deviceId)
 {
     var adb = new ADB(deviceId);
-    int delayTimeout = 60 * 1000;
+    int delayTimeout = 30 * 1000;
     int failedStartAttempts = 0;
     const int maxFailedAttempts = 5;
 
@@ -90,15 +90,12 @@ void RunDeviceThread(string deviceId)
             try
             {
                 WriteLog($"{deviceId}: Installing MaxCloud");
-                 adb.InstallApp(Constrants.MAXCLOUD_APK);
+                adb.InstallApp(Constrants.MAXCLOUD_APK);
             }
             finally
             {
                 semaphore.Release();
             }
-
-            Thread.Sleep(TimeSpan.FromSeconds(5));
-            continue;
         }
 
         var statusDevice = adb.sendBroadcastMaxCloud(ADB.AdbCaller.PING_PONG);
@@ -191,9 +188,10 @@ void RunDeviceThread(string deviceId)
 
             string productNumber = json["PRODUCT_NUMBER"].ToString();
             string ipAddress = json["IP_ADDRESS"].ToString();
+            string serial = adb.RunShell("getprop ro.serialno").Trim();
 
             if (!string.IsNullOrEmpty(productNumber))
-                DeviceDatabase.SaveDeviceInfo(productNumber, ipAddress);
+                DeviceDatabase.SaveDeviceInfo(productNumber, ipAddress, deviceId, serial);
 
             Thread.Sleep(delayTimeout);
         }
@@ -251,31 +249,35 @@ void RunIPLookupMode()
 
     while (true)
     {
-        Console.Write("Enter product number: ");
-        string productNumber = Console.ReadLine()?.Trim();
+        Console.Write("Enter product number, device ID, or serial number: ");
+        string searchTerm = Console.ReadLine()?.Trim();
 
-        if (string.IsNullOrEmpty(productNumber))
+        if (string.IsNullOrEmpty(searchTerm))
         {
-            Console.WriteLine("Product number cannot be empty. Please try again.");
+            Console.WriteLine("Search term cannot be empty. Please try again.");
             continue;
         }
 
-        if (productNumber.ToLower() == "exit")
+        if (searchTerm.ToLower() == "exit")
         {
             Console.WriteLine("Returning to main menu...");
             SelectMode();
             return;
         }
 
-        string ipAddress = DeviceDatabase.GetIPAddressByProductNumber(productNumber);
+        var (ipAddress, deviceId, productNumber, serial) = DeviceDatabase.GetDeviceInfoBySearch(searchTerm);
 
         if (string.IsNullOrEmpty(ipAddress))
         {
-            Console.WriteLine($"No IP address found for product number: {productNumber}");
+            Console.WriteLine($"No device found for search term: {searchTerm}");
         }
         else
         {
-            Console.WriteLine($"IP Address for {productNumber}: {ipAddress}");
+            Console.WriteLine($"Found device:");
+            Console.WriteLine($"IP Address: {ipAddress}");
+            Console.WriteLine($"Device ID: {deviceId}");
+            Console.WriteLine($"Product Number: {productNumber}");
+            Console.WriteLine($"Serial Number: {serial}");
             ADB.RunScrcpy($"{ipAddress}:5555");
         }
 
@@ -319,7 +321,6 @@ void RunDeviceManagementMode()
             Thread.Sleep(TimeSpan.FromSeconds(30));
         }
     }).Start();
-
 
     // ADB.RunAdb("adb kill-server");
 
