@@ -20,6 +20,11 @@ public class ADB
     {
         return RunAdb($"adb -s {DeviceID} install -r {apkPath}", 100);
     }
+    
+    public string UninstallApp(string apkPath)
+    {
+        return RunAdb($"adb -s {DeviceID} uninstall {apkPath}", 100);
+    }
 
     public void PushFile(string source, string destination)
     {
@@ -64,7 +69,10 @@ public class ADB
         string shellCommand = $"am broadcast -a com.maxcloud.app.{action.ToString()} -n com.maxcloud.app/.AdbCaller";
 
         if (action == AdbCaller.LOGIN_DEVICE)
+        {
+            RunShell("monkey -p com.maxcloud.app -c android.intent.category.LAUNCHER 1");
             shellCommand += $" -e token {TOKEN}";
+        }
 
         string adbOutput = RunShell(shellCommand);
 
@@ -89,13 +97,20 @@ public class ADB
         RunAdb($"adb -s {DeviceID} reboot");
     }
 
-    // tao 1 ham static chay scrspy voi device id
-    
     public static string RunScrcpy(string deviceID)
     {
-        string scrcpyPath = Path.Combine(AppContext.BaseDirectory, "scrcpy", "scrcpy.exe");
-        string scrcpyCommand = $"\"{scrcpyPath}\" -s {deviceID} --window-title \"{deviceID}\"";
-        return RunAdb(scrcpyCommand);
+        try
+        {
+            string scrcpyPath = Path.Combine(AppContext.BaseDirectory, "scrcpy", "scrcpy.exe");
+
+            string scrcpyCommand = $"\"{scrcpyPath}\" -s {deviceID} --window-title \"{deviceID}\"";
+            
+            return RunAdb(scrcpyCommand, -1); 
+        }
+        catch (Exception ex)
+        {
+            return $"Error running scrcpy: {ex.Message}";
+        }
     }
     
     public static void ScanDevice(string ip, string port, CancellationToken token)

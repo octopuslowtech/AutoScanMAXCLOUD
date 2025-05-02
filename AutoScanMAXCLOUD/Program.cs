@@ -56,6 +56,8 @@ void RunDeviceThread(string deviceId)
         
         if (deviceState == "recovery")
         {
+            WriteLog($"{deviceId}: Factory reset device");
+
             adb.RunShell("twrp wipe data");
             Thread.Sleep(TimeSpan.FromSeconds(3));
 
@@ -147,16 +149,25 @@ void RunDeviceThread(string deviceId)
                     continue;
                 }
 
-                var jsonLogin = JObject.Parse(loginResult);
-
-                string status = jsonLogin["MESSAGE"].ToString();
-
-                if (status != "LOGIN_SUCCESS")
+                try
                 {
-                    WriteLog($"{deviceId}: {status}");
-                    Thread.Sleep(TimeSpan.FromSeconds(5));
-                    continue;
+                    var jsonLogin = JObject.Parse(loginResult);
+
+                    string status = jsonLogin["MESSAGE"].ToString();
+
+                    if (status != "LOGIN_SUCCESS")
+                    {
+                        WriteLog($"{deviceId}: {status}");
+                        Thread.Sleep(TimeSpan.FromSeconds(5));
+                        continue;
+                    }
                 }
+                catch (Exception ex)
+                {
+                    
+                }
+
+               
             }
 
             bool isRunning = json["IS_RUNNING"].ToObject<bool>();
@@ -169,7 +180,13 @@ void RunDeviceThread(string deviceId)
                 {
                     WriteLog(
                         $"{deviceId}: Service failed to start after {maxFailedAttempts} attempts. Rebooting device...");
+                    
+                    adb.UninstallApp(Constrants.MAXCLOUD_PACKAGE);
+                    
+                    Thread.Sleep(TimeSpan.FromSeconds(5));
+                    
                     adb.Reboot();
+                    
                     return;
                 }
 
