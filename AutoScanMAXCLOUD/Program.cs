@@ -1,4 +1,5 @@
-﻿using System.Net;
+﻿using System.Diagnostics;
+using System.Net;
 using System.Runtime.InteropServices;
 using AutoScanMAXCLOUD;
 using Newtonsoft.Json.Linq;
@@ -40,7 +41,7 @@ string GetToken()
 void RunDeviceThread(string deviceId)
 {
     var adb = new ADB(deviceId);
-    int delayTimeout = 30 * 1000;
+    int delayTimeout = 15 * 1000;
     int failedStartAttempts = 0;
     const int maxFailedAttempts = 5;
 
@@ -166,8 +167,6 @@ void RunDeviceThread(string deviceId)
                 {
                     
                 }
-
-               
             }
 
             bool isRunning = json["IS_RUNNING"].ToObject<bool>();
@@ -181,7 +180,7 @@ void RunDeviceThread(string deviceId)
                     WriteLog(
                         $"{deviceId}: Service failed to start after {maxFailedAttempts} attempts. Rebooting device...");
                     
-                    adb.UninstallApp(Constrants.MAXCLOUD_PACKAGE);
+                    // adb.UninstallApp(Constrants.MAXCLOUD_PACKAGE);
                     
                     Thread.Sleep(TimeSpan.FromSeconds(5));
                     
@@ -208,7 +207,7 @@ void RunDeviceThread(string deviceId)
             string serial = adb.RunShell("getprop ro.serialno").Trim();
 
             if (!string.IsNullOrEmpty(productNumber))
-                DeviceDatabase.SaveDeviceInfo(productNumber, ipAddress, deviceId, serial);
+                DeviceDatabase.SaveDeviceInfo(productNumber, ipAddress,serial);
 
             Thread.Sleep(delayTimeout);
         }
@@ -282,7 +281,7 @@ void RunIPLookupMode()
             return;
         }
 
-        var (ipAddress, deviceId, productNumber, serial) = DeviceDatabase.GetDeviceInfoBySearch(searchTerm);
+        var (ipAddress,productNumber, serial) = DeviceDatabase.GetDeviceInfoBySearch(searchTerm);
 
         if (string.IsNullOrEmpty(ipAddress))
         {
@@ -292,7 +291,6 @@ void RunIPLookupMode()
         {
             Console.WriteLine($"Found device:");
             Console.WriteLine($"IP Address: {ipAddress}");
-            Console.WriteLine($"Device ID: {deviceId}");
             Console.WriteLine($"Product Number: {productNumber}");
             Console.WriteLine($"Serial Number: {serial}");
             ADB.RunScrcpy($"{ipAddress}:5555");
@@ -301,6 +299,9 @@ void RunIPLookupMode()
         Console.WriteLine();
     }
 }
+
+
+ 
 
 void RunDeviceManagementMode()
 {
@@ -390,7 +391,6 @@ void RunDeviceManagementMode()
         }
     }).Start();
 
-
     Console.ReadKey();
 }
 
@@ -435,3 +435,4 @@ void SelectMode()
 }
 
 SelectMode();
+

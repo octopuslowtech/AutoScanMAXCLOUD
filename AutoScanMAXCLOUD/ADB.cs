@@ -20,7 +20,7 @@ public class ADB
     {
         return RunAdb($"adb -s {DeviceID} install -r {apkPath}", 100);
     }
-    
+
     public string UninstallApp(string apkPath)
     {
         return RunAdb($"adb -s {DeviceID} uninstall {apkPath}", 100);
@@ -37,7 +37,7 @@ public class ADB
         string result = RunAdb($"adb -s {DeviceID} get-state");
         return result;
     }
-    
+
     public void SetupMaxCloud()
     {
         var permissions = new List<string>
@@ -101,18 +101,81 @@ public class ADB
     {
         try
         {
-            string scrcpyPath = Path.Combine(AppContext.BaseDirectory, "scrcpy", "scrcpy.exe");
+            // Xác định nền tảng (Windows hoặc Linux)
+            bool isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+            bool isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
 
-            string scrcpyCommand = $"\"{scrcpyPath}\" -s {deviceID} --window-title \"{deviceID}\"";
-            
-            return RunAdb(scrcpyCommand, -1); 
+            if (!isWindows && !isLinux)
+            {
+                return "Error: Unsupported platform. Only Windows and Linux are supported.";
+            }
+
+            // Xác định tên file thực thi của scrcpy
+            string scrcpyFileName = isWindows ? "scrcpy.exe" : "scrcpy";
+
+            // Đường dẫn tới scrcpy
+            string scrcpyPath = Path.Combine(AppContext.BaseDirectory, "scrcpy", scrcpyFileName);
+
+            // Kiểm tra xem file scrcpy có tồn tại không
+            if (!File.Exists(scrcpyPath))
+            {
+                return $"Error: scrcpy executable not found at {scrcpyPath}";
+            }
+
+            // Đảm bảo scrcpy có quyền thực thi trên Linux
+            if (isLinux)
+            {
+                try
+                {
+                    ProcessStartInfo chmodInfo = new ProcessStartInfo
+                    {
+                        FileName = "chmod",
+                        Arguments = $"+x \"{scrcpyPath}\"",
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    using (Process chmodProcess = Process.Start(chmodInfo))
+                    {
+                        chmodProcess?.WaitForExit();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    return $"Error setting executable permission for scrcpy: {ex.Message}";
+                }
+            }
+
+            // Cấu hình lệnh chạy scrcpy
+            ProcessStartInfo startInfo = new ProcessStartInfo
+            {
+                FileName = scrcpyPath,
+                Arguments = $"-s {deviceID} --window-title \"{deviceID}\"",
+                UseShellExecute = isWindows, // UseShellExecute = true trên Windows để chạy ngầm, false trên Linux
+                CreateNoWindow = isWindows, // Ẩn cửa sổ console trên Windows
+                RedirectStandardOutput = false, // Không chuyển hướng output
+                RedirectStandardError = false // Không chuyển hướng error
+            };
+
+            // Chạy scrcpy ngầm
+            using (Process process = new Process { StartInfo = startInfo })
+            {
+                try
+                {
+                    process.Start();
+                    return "scrcpy started successfully in the background";
+                }
+                catch (Exception ex)
+                {
+                    return $"Error starting scrcpy: {ex.Message}";
+                }
+            }
         }
         catch (Exception ex)
         {
             return $"Error running scrcpy: {ex.Message}";
         }
     }
-    
+
     public static void ScanDevice(string ip, string port, CancellationToken token)
     {
         try
@@ -122,9 +185,9 @@ public class ADB
                 var connectTask = client.ConnectAsync(ip, int.Parse(port));
 
                 if (!connectTask.Wait(TimeSpan.FromSeconds(5), token))
-                    return; 
+                    return;
 
-                 RunAdb($"adb connect {ip}:{port}", 5);
+                RunAdb($"adb connect {ip}:{port}", 5);
             }
         }
         catch (Exception)
@@ -132,7 +195,7 @@ public class ADB
         }
     }
 
-   
+
     public static string RunAdb(string cmd, int timeout = 10)
     {
         string text = "";

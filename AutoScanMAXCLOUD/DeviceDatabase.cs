@@ -18,11 +18,9 @@ public class DeviceDatabase
             using var command = connection.CreateCommand();
             command.CommandText = @"
                     CREATE TABLE IF NOT EXISTS Devices (
-                        ProductNumber TEXT PRIMARY KEY,
+                        Serial TEXT PRIMARY KEY,
                         IpAddress TEXT,
-                        DeviceId TEXT,
-                        Serial TEXT,
-                        LastUpdated TEXT
+                        ProductNumber TEXT
                     )";
             command.ExecuteNonQuery();
             _initialized = true;
@@ -35,52 +33,38 @@ public class DeviceDatabase
         connection.Open();
         return connection;
     }
-
-    public static void SaveDeviceInfo(string productNumber, string ipAddress, string deviceId, string serial)
+    public static void SaveDeviceInfo(string productNumber, string ipAddress, string serial)
     {
         if (string.IsNullOrEmpty(productNumber)) return;
         if (!_initialized) Initialize();
 
-        using var connection = CreateConnection();
-        using var command = connection.CreateCommand();
-        command.CommandText = @"
-                INSERT OR REPLACE INTO Devices (ProductNumber, IpAddress, DeviceId, Serial, LastUpdated)
-                VALUES (@productNumber, @ipAddress, @deviceId, @serial, @lastUpdated)";
+        lock (_lock)
+        {
+            using var connection = CreateConnection();
+            using var command = connection.CreateCommand();
+            command.CommandText = @"
+                INSERT OR REPLACE INTO Devices (ProductNumber, IpAddress, Serial)
+                VALUES (@productNumber, @ipAddress, @serial)";
 
-        command.Parameters.AddWithValue("@productNumber", productNumber);
-        command.Parameters.AddWithValue("@ipAddress", ipAddress);
-        command.Parameters.AddWithValue("@deviceId", deviceId);
-        command.Parameters.AddWithValue("@serial", serial);
-        command.Parameters.AddWithValue("@lastUpdated", DateTime.Now.ToString("o"));
+            command.Parameters.AddWithValue("@productNumber", productNumber);
+            command.Parameters.AddWithValue("@ipAddress", ipAddress);
+            command.Parameters.AddWithValue("@serial", serial);
 
-        command.ExecuteNonQuery();
+            command.ExecuteNonQuery();
+        }
     }
     
-    public static string GetIPAddressByProductNumber(string productNumber)
+    public static (string ipAddress, string productNumber, string serial) GetDeviceInfoBySearch(string search)
     {
-        if (string.IsNullOrEmpty(productNumber)) return string.Empty;
-        if (!_initialized) Initialize();
-
-        using var connection = CreateConnection();
-        using var command = connection.CreateCommand();
-        command.CommandText = "SELECT IpAddress FROM Devices WHERE ProductNumber = @productNumber";
-        command.Parameters.AddWithValue("@productNumber", productNumber);
-
-        return command.ExecuteScalar()?.ToString() ?? string.Empty;
-    }
-
-    public static (string ipAddress, string deviceId, string productNumber, string serial) GetDeviceInfoBySearch(string search)
-    {
-        if (string.IsNullOrEmpty(search)) return (string.Empty, string.Empty, string.Empty, string.Empty);
+        if (string.IsNullOrEmpty(search)) return (string.Empty, string.Empty, string.Empty);
         if (!_initialized) Initialize();
 
         using var connection = CreateConnection();
         using var command = connection.CreateCommand();
         command.CommandText = @"
-            SELECT IpAddress, DeviceId, ProductNumber, Serial 
+            SELECT IpAddress, ProductNumber, Serial 
             FROM Devices 
             WHERE ProductNumber = @search 
-            OR DeviceId = @search
             OR IpAddress = @search
             OR Serial = @search";
         command.Parameters.AddWithValue("@search", search);
@@ -88,10 +72,10 @@ public class DeviceDatabase
         using var reader = command.ExecuteReader();
         if (reader.Read())
         {
-            return (reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3));
+            return (reader.GetString(0), reader.GetString(1), reader.GetString(2));
         }
 
-        return (string.Empty, string.Empty, string.Empty, string.Empty);
+        return (string.Empty, string.Empty, string.Empty);
     }
 }
 
