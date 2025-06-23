@@ -26,6 +26,22 @@ public class ADB
         return RunAdb($"adb -s {DeviceID} uninstall {apkPath}", 100);
     }
 
+
+    public bool ExistPackage(string packageName, int loopCheck = 5)
+    {
+        for (int i = 0; i < loopCheck; i++)
+        {
+            var lstPackage = RunShell("pm list packages -3");
+
+            if (lstPackage.Contains(packageName))
+                return true;
+
+            Thread.Sleep(1000);
+        }
+
+        return false;
+    }
+
     public void PushFile(string source, string destination)
     {
         string result = RunAdb($"adb -s {DeviceID} push {source} {destination}");
@@ -52,8 +68,6 @@ public class ADB
         {
             RunShell($"pm grant com.maxcloud.app {permission}");
         }
-
-        // RunShell("monkey -p com.maxcloud.app -c android.intent.category.LAUNCHER 1");
     }
 
     public static string TOKEN;
@@ -80,7 +94,6 @@ public class ADB
 
         if (!match.Success)
         {
-            RunShell("monkey -p com.maxcloud.app -c android.intent.category.LAUNCHER 1");
             return string.Empty;
         }
 
@@ -198,114 +211,60 @@ public class ADB
 
     public static string RunAdb(string cmd, int timeout = 10)
     {
+        int countWaitFail = 0;
+        int maxWaitFail = 3;
         string text = "";
-
-        bool isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-
-        if (isWindows)
+        try
         {
-            try
+            Again:
+            Process process = new Process();
+            process.StartInfo.FileName = "cmd.exe";
+            process.StartInfo.Arguments = $"/c {cmd}";
+            process.StartInfo.Verb = "runas";
+            process.StartInfo.CreateNoWindow = true;
+            process.StartInfo.UseShellExecute = false;
+            process.StartInfo.RedirectStandardError = true;
+            process.StartInfo.RedirectStandardOutput = true;
+            process.StartInfo.StandardOutputEncoding = Encoding.UTF8;
+            process.StartInfo.StandardErrorEncoding = Encoding.UTF8;
+
+            string output = "";
+            process.OutputDataReceived += (s, e) =>
             {
-                Again:
-                Process process = new Process();
+                if (!string.IsNullOrEmpty(e.Data))
+                    output += (e.Data + "\n");
+            };
+            string error = "";
+            process.ErrorDataReceived += (s, e) =>
+            {
+                if (!string.IsNullOrEmpty(e.Data))
+                    error += (e.Data + "\n");
+            };
 
-                process.StartInfo.FileName = "cmd.exe";
-                process.StartInfo.Arguments = $"/c {cmd}";
-                process.StartInfo.Verb = "runas";
-                process.StartInfo.CreateNoWindow = true;
-                process.StartInfo.UseShellExecute = false;
-                process.StartInfo.RedirectStandardError = true;
-                process.StartInfo.RedirectStandardOutput = true;
-                process.StartInfo.StandardOutputEncoding = Encoding.UTF8;
-                process.StartInfo.StandardErrorEncoding = Encoding.UTF8;
+            process.Start();
 
-                string output = "";
-                process.OutputDataReceived += (s, e) =>
-                {
-                    if (!string.IsNullOrEmpty(e.Data))
-                        output += (e.Data + "\n");
-                };
-                string error = "";
-                process.ErrorDataReceived += (s, e) =>
-                {
-                    if (!string.IsNullOrEmpty(e.Data))
-                        error += (e.Data + "\n");
-                };
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
 
-                process.Start();
+            bool isWaitFail = !process.WaitForExit(timeout < 0 ? -1 : timeout * 1000);
+            process.Close();
 
-                process.BeginOutputReadLine();
-                process.BeginErrorReadLine();
+            if (isWaitFail && !cmd.StartsWith("scrcpy"))
+            {
+                countWaitFail++;
+                goto Again;
+            }
 
-                bool isWaitFail = !process.WaitForExit(timeout < 0 ? -1 : timeout * 1000);
-                process.Close();
-
-                if (isWaitFail && !cmd.StartsWith("scrcpy"))
+            if (error != "")
+            {
+                if (error.Contains("daemon not running") && !error.Contains("daemon started successfully"))
                     goto Again;
-
-                if (error != "")
-                {
-                    if (error.Contains("daemon not running") && !error.Contains("daemon started successfully"))
-                        goto Again;
-                }
-
-                text = output.Trim();
             }
-            catch
-            {
-            }
+
+            text = output.Trim();
         }
-        else
+        catch
         {
-            try
-            {
-                Again:
-                Process process = new Process();
-
-                process.StartInfo.FileName = "/bin/bash";
-                process.StartInfo.Arguments = $"-c \"{cmd}\"";
-                process.StartInfo.CreateNoWindow = true;
-                process.StartInfo.UseShellExecute = false;
-                process.StartInfo.RedirectStandardError = true;
-                process.StartInfo.RedirectStandardOutput = true;
-                process.StartInfo.StandardOutputEncoding = Encoding.UTF8;
-                process.StartInfo.StandardErrorEncoding = Encoding.UTF8;
-
-                string output = "";
-                process.OutputDataReceived += (s, e) =>
-                {
-                    if (!string.IsNullOrEmpty(e.Data))
-                        output += (e.Data + "\n");
-                };
-                string error = "";
-                process.ErrorDataReceived += (s, e) =>
-                {
-                    if (!string.IsNullOrEmpty(e.Data))
-                        error += (e.Data + "\n");
-                };
-
-                process.Start();
-
-                process.BeginOutputReadLine();
-                process.BeginErrorReadLine();
-
-                bool isWaitFail = !process.WaitForExit(timeout < 0 ? -1 : timeout * 1000);
-                process.Close();
-
-                if (isWaitFail && !cmd.StartsWith("scrcpy"))
-                    goto Again;
-
-                if (error != "")
-                {
-                    if (error.Contains("daemon not running") && !error.Contains("daemon started successfully"))
-                        goto Again;
-                }
-
-                text = output.Trim();
-            }
-            catch
-            {
-            }
         }
 
         return text;

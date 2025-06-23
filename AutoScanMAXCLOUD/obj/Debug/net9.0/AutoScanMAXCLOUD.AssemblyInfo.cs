@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("AutoScanMAXCLOUD")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ac32bda688c31a1495d8ff575e9c836a6f9f3e1b")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d93c9711c55c41d2bf461f97c4224ea99c58c492")]
 [assembly: System.Reflection.AssemblyProductAttribute("AutoScanMAXCLOUD")]
 [assembly: System.Reflection.AssemblyTitleAttribute("AutoScanMAXCLOUD")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
